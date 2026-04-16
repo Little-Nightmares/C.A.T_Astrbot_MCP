@@ -23,6 +23,35 @@ WEEKDAY_MAP = {
     "天": (7, "星期日"),
 }
 
+# NJUST 江阴校区节次-时间映射表
+# 上午: 8:00 开始，每节 45 分钟，节间 5 分钟，第 2 节后大休息 15 分钟
+# 下午: 14:00 开始，每节 45 分钟，节间 5 分钟，第 7 节后大休息 15 分钟
+# 晚上: 19:00 开始，每节 45 分钟，节间 5 分钟
+SECTION_TIME_TABLE: dict[int, tuple[str, str]] = {
+    1: ("08:00", "08:45"),
+    2: ("08:50", "09:35"),
+    3: ("09:50", "10:35"),
+    4: ("10:40", "11:25"),
+    5: ("11:30", "12:15"),
+    6: ("14:00", "14:45"),
+    7: ("14:50", "15:35"),
+    8: ("15:50", "16:35"),
+    9: ("16:40", "17:25"),
+    10: ("17:30", "18:15"),
+    11: ("19:00", "19:45"),
+    12: ("19:50", "20:35"),
+    13: ("20:40", "21:25"),
+}
+
+
+def format_section_time(block_start: int, block_end: int) -> str:
+    """将节次编号转换为具体时间，如 6,7 → '14:00-15:35'"""
+    start = SECTION_TIME_TABLE.get(block_start)
+    end = SECTION_TIME_TABLE.get(block_end)
+    if start and end:
+        return f"{start[0]}-{end[1]}"
+    return f"第 {block_start}-{block_end} 节"
+
 WEEKDAY_LABELS = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
@@ -914,7 +943,7 @@ def format_schedule_text(result: LessonsParseResult, week: int | None = None) ->
         label = WEEKDAY_LABELS[day]
         lines.append(f"### {label}\n")
         for entry in sorted(entries, key=lambda e: e.block_start):
-            time_str = f"第 {entry.block_start}-{entry.block_end} 节"
+            time_str = format_section_time(entry.block_start, entry.block_end)
             location_str = f"📍 {entry.location}" if entry.location else ""
             teacher_str = f"👨‍🏫 {entry.teacher}" if entry.teacher else ""
             credit_str = f"({entry.credit} 学分)" if entry.credit else ""

@@ -26,6 +26,7 @@ from .portal.parsers import (
     format_exams_text,
     format_grades_text,
     format_schedule_text,
+    format_section_time,
 )
 
 logger = logging.getLogger(__name__)
@@ -251,11 +252,13 @@ def _get_current_week() -> int | None:
     """根据学期开始日期计算当前周次，未配置则返回 None"""
     config = get_config()
     if not config.semester_start_date:
+        logger.debug("未配置 SEMESTER_START_DATE，无法计算当前周次")
         return None
     try:
         start = datetime.strptime(config.semester_start_date, "%Y-%m-%d").date()
         today = datetime.now().date()
         week = max(1, (today - start).days // 7 + 1)
+        logger.info("当前周次: 第 %d 周 (学期开始: %s)", week, config.semester_start_date)
         return week
     except ValueError:
         logger.warning("学期开始日期格式错误: %s", config.semester_start_date)
@@ -303,7 +306,7 @@ def query_today_schedule() -> str:
         else:
             lines.append("")
         for entry in sorted(today_entries, key=lambda e: e.block_start):
-            time_str = f"第 {entry.block_start}-{entry.block_end} 节"
+            time_str = format_section_time(entry.block_start, entry.block_end)
             lines.append(
                 f"### ⏰ {time_str}\n"
                 f"**{entry.course_name}**\n"
@@ -704,6 +707,10 @@ def main():
         os.environ["PORTAL_PASSWORD"] = args.password
     if args.semester_start_date:
         os.environ["SEMESTER_START_DATE"] = args.semester_start_date
+
+    # 刷新配置单例，确保包含命令行参数
+    from .config import load_config as _load_config
+    set_config(_load_config())
 
     logging.basicConfig(
         level=logging.INFO,
