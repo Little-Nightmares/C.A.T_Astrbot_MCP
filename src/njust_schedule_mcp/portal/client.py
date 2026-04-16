@@ -200,6 +200,18 @@ class PortalClient:
         result = self.login()
         return result.cookies
 
+    def _fetch_with_retry(self, fetch_fn, *args, **kwargs):
+        """执行请求，会话过期时自动重新登录并重试一次"""
+        try:
+            return fetch_fn(*args, **kwargs)
+        except PortalSessionExpiredError:
+            logger.info("会话已过期，自动重新登录...")
+            self._session_cookies.clear()
+            self._session_file.unlink(missing_ok=True)
+            result = self.login()
+            self._session_cookies = result.cookies
+            return fetch_fn(*args, **kwargs)
+
     def login(self, username: str = "", password: str = "") -> PortalLoginResult:
         """
         登录教务系统
@@ -450,15 +462,15 @@ class PortalClient:
 
     def get_lessons(self, term: str | None = None) -> LessonsParseResult:
         """获取并解析课表"""
-        page = self.fetch_lessons(term)
+        page = self._fetch_with_retry(self.fetch_lessons, term)
         return parse_lessons_html(page.html)
 
     def get_grades(self) -> GradesParseResult:
         """获取并解析成绩"""
-        page = self.fetch_grades()
+        page = self._fetch_with_retry(self.fetch_grades)
         return parse_grades_html(page.html)
 
     def get_exams(self) -> ExamsParseResult:
         """获取并解析考试安排"""
-        page = self.fetch_exams()
+        page = self._fetch_with_retry(self.fetch_exams)
         return parse_exams_html(page.html)
