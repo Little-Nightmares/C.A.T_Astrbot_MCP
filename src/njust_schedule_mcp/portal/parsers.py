@@ -645,22 +645,50 @@ def parse_lessons_html(html: str) -> LessonsParseResult:
                 weekday_label=item["weekday_label"],
                 block_start=block_start,
                 block_end=block_end,
-                block_label_start=item.get("block_label", str(block_start)),
-                block_label_end=item.get("block_label_end", str(block_end)),
-                time_text=detail_segment.time_text if detail_segment else "",
+                block_label_start=str(block_start),
+                block_label_end=str(block_end),
+                time_text=(
+                    detail_segment.time_text
+                    if detail_segment
+                    else f"{item['weekday_label']} {item.get('block_label', '')}"
+                ),
                 week_text=item["week_text"],
                 week_numbers=item["week_numbers"],
-                location=item["location"],
+                location=(
+                    item["location"]
+                    or (detail_segment.location if detail_segment else None)
+                ),
                 credit=detail.credit if detail else None,
                 course_attribute=detail.course_attribute if detail else None,
                 selection_stage=detail.selection_stage if detail else None,
             )
         )
 
+    # 去重（参考 cat-schedule 的 _occurrence_dedupe_key）
+    deduped_entries: list[ScheduleOccurrence] = []
+    seen_keys: set[tuple] = set()
+    for entry in entries:
+        dedupe_key = (
+            entry.course_code,
+            entry.class_no,
+            entry.course_name,
+            entry.teacher,
+            entry.weekday,
+            entry.block_start,
+            entry.block_end,
+            tuple(entry.week_numbers),
+            entry.location,
+            entry.time_text,
+        )
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        deduped_entries.append(entry)
+
     return LessonsParseResult(
         term=term,
         available_terms=available_terms,
-        entries=entries,
+        entries=deduped_entries,
     )
 
 
@@ -754,26 +782,27 @@ def parse_grades_html(html: str) -> GradesParseResult:
         if len(cells) < 6:
             continue
 
-        # 尝试适配不同列数的成绩表
-        # 常见列序：序号, 学期, 课程编号, 课程名称, 成绩, 学分, 学时, 考核方式, 课程属性, 课程性质
-        # 或简化版：序号, 学期, 课程编号, 课程名称, 成绩, 学分
+        # NJUST 成绩表列序（参考 cat-schedule）：
+        # 序号, 学期, 课程编号, 课程名称, 成绩, 成绩标志(等级), 学分, 学时, 考核方式, 课程属性, 课程性质
         item: dict = {}
-        if len(cells) >= 10:
+        if len(cells) >= 11:
             item["term"] = normalize_text(cells[1].get_text(strip=True))
             item["course_code"] = normalize_text(cells[2].get_text(strip=True)) or None
             item["course_name"] = normalize_text(cells[3].get_text(strip=True))
             score_text = normalize_text(cells[4].get_text(strip=True))
-            item["credit"] = normalize_text(cells[5].get_text(strip=True)) or None
-            item["total_hours"] = normalize_text(cells[6].get_text(strip=True)) or None
-            item["assessment_method"] = normalize_text(cells[7].get_text(strip=True)) or None
-            item["course_attribute"] = normalize_text(cells[8].get_text(strip=True)) or None
-            item["course_nature"] = normalize_text(cells[9].get_text(strip=True)) or None
+            item["score_flag"] = normalize_text(cells[5].get_text(strip=True)) or None
+            item["credit"] = normalize_text(cells[6].get_text(strip=True)) or None
+            item["total_hours"] = normalize_text(cells[7].get_text(strip=True)) or None
+            item["assessment_method"] = normalize_text(cells[8].get_text(strip=True)) or None
+            item["course_attribute"] = normalize_text(cells[9].get_text(strip=True)) or None
+            item["course_nature"] = normalize_text(cells[10].get_text(strip=True)) or None
         elif len(cells) >= 6:
             item["term"] = normalize_text(cells[1].get_text(strip=True))
             item["course_code"] = normalize_text(cells[2].get_text(strip=True)) or None
             item["course_name"] = normalize_text(cells[3].get_text(strip=True))
             score_text = normalize_text(cells[4].get_text(strip=True))
-            item["credit"] = normalize_text(cells[5].get_text(strip=True)) or None
+            item["score_flag"] = normalize_text(cells[5].get_text(strip=True)) or None if len(cells) > 5 else None
+            item["credit"] = normalize_text(cells[6].get_text(strip=True)) or None if len(cells) > 6 else None
             item["total_hours"] = None
             item["assessment_method"] = None
             item["course_attribute"] = None
@@ -781,10 +810,11 @@ def parse_grades_html(html: str) -> GradesParseResult:
         else:
             continue
 
-        score_str, score_numeric, score_flag = _parse_score(score_text)
+        score_str, score_numeric, parsed_flag = _parse_score(score_text)
         item["score"] = score_str
         item["score_numeric"] = score_numeric
-        item["score_flag"] = score_flag
+        # 保留 cells[5] 的原始 score_flag，仅当为空时使用 _parse_score 的结果
+        item["score_flag"] = item.get("score_flag") or parsed_flag
 
         items.append(
             GradeItemParsed(
