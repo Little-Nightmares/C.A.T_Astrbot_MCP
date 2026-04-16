@@ -323,11 +323,16 @@ def query_today_schedule() -> str:
 
 
 @mcp.tool
-def query_week_schedule() -> str:
+def query_week_schedule(
+    week: Annotated[int, "周次，0 或不传表示当前周，传入具体数字查指定周（如 8 查第 8 周）"] = 0,
+) -> str:
     """
-    查询本周（当前周）的课程安排，按天分组显示。返回的数据是当前周，不是下周或其他周。
+    查询指定周次的课程安排，按天分组显示。
 
-    使用示例：query_week_schedule()
+    使用示例：
+    - query_week_schedule()       # 查当前周
+    - query_week_schedule(week=0) # 查当前周
+    - query_week_schedule(week=8) # 查第 8 周
     """
     try:
         client = _get_client()
@@ -336,12 +341,14 @@ def query_week_schedule() -> str:
         # 获取课表
         result = _get_cached_or_fetch_lessons(client, cache)
 
-        # 计算当前周次
-        current_week = _get_current_week()
-        if current_week is None:
-            return "⚠️ 未配置学期开始日期（SEMESTER_START_DATE），无法计算当前周次。请在 MCP 配置的 args 中添加 --semester-start-date YYYY-MM-DD，或通过 bind_account 工具绑定。"
+        # 确定查询周次
+        if week == 0:
+            current_week = _get_current_week()
+            if current_week is None:
+                return "⚠️ 未配置学期开始日期（SEMESTER_START_DATE），无法计算当前周次。请在 MCP 配置的 args 中添加 --semester-start-date YYYY-MM-DD，或通过 bind_account 工具绑定。"
+            week = current_week
 
-        return format_schedule_text(result, week=current_week)
+        return format_schedule_text(result, week=week)
     except PortalError as e:
         return f"❌ 查询失败: {e.message}"
     except Exception as e:
