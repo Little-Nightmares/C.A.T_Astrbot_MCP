@@ -858,42 +858,50 @@ def parse_exams_html(html: str) -> ExamsParseResult:
         if len(cells) < 4:
             continue
 
-        # 常见列序：序号, 课程名称/编号, 考试日期, 考试时间, 考试地点, 座位号, 考试形式
+        # NJUST 考试安排列序：序号, 考试场次, 课程编号, 课程名称, 考试时间(含日期), 考场, 座位号
         item: dict = {}
         if len(cells) >= 7:
-            item["course_name"] = normalize_text(cells[1].get_text(strip=True))
+            item["exam_session"] = normalize_text(cells[1].get_text(strip=True)) or None
             item["course_code"] = normalize_text(cells[2].get_text(strip=True)) or None
-            item["exam_date"] = normalize_text(cells[3].get_text(strip=True))
-            item["exam_time"] = normalize_text(cells[4].get_text(strip=True))
+            item["course_name"] = normalize_text(cells[3].get_text(strip=True))
+            item["exam_datetime"] = normalize_text(cells[4].get_text(strip=True))
             item["location"] = normalize_text(cells[5].get_text(strip=True)) or None
             item["seat_number"] = normalize_text(cells[6].get_text(strip=True)) or None
-            item["exam_type"] = normalize_text(cells[7].get_text(strip=True)) if len(cells) > 7 else None
         elif len(cells) >= 5:
-            item["course_name"] = normalize_text(cells[1].get_text(strip=True))
+            item["exam_session"] = None
             item["course_code"] = None
-            item["exam_date"] = normalize_text(cells[2].get_text(strip=True))
-            item["exam_time"] = normalize_text(cells[3].get_text(strip=True))
-            item["location"] = normalize_text(cells[4].get_text(strip=True)) or None
-            item["seat_number"] = normalize_text(cells[5].get_text(strip=True)) if len(cells) > 5 else None
-            item["exam_type"] = None
+            item["course_name"] = normalize_text(cells[1].get_text(strip=True))
+            item["exam_datetime"] = normalize_text(cells[2].get_text(strip=True))
+            item["location"] = normalize_text(cells[3].get_text(strip=True)) or None
+            item["seat_number"] = normalize_text(cells[4].get_text(strip=True)) if len(cells) > 4 else None
         else:
-            item["course_name"] = normalize_text(cells[1].get_text(strip=True))
+            item["exam_session"] = None
             item["course_code"] = None
-            item["exam_date"] = normalize_text(cells[2].get_text(strip=True))
-            item["exam_time"] = normalize_text(cells[3].get_text(strip=True))
-            item["location"] = normalize_text(cells[4].get_text(strip=True)) if len(cells) > 4 else None
+            item["course_name"] = normalize_text(cells[1].get_text(strip=True))
+            item["exam_datetime"] = normalize_text(cells[2].get_text(strip=True))
+            item["location"] = normalize_text(cells[3].get_text(strip=True)) if len(cells) > 3 else None
             item["seat_number"] = None
-            item["exam_type"] = None
+
+        # 拆分考试日期和时间（格式: "2026-04-21 13:30~15:30"）
+        exam_datetime = item.get("exam_datetime", "")
+        exam_date = ""
+        exam_time = ""
+        if " " in exam_datetime:
+            parts = exam_datetime.split(" ", 1)
+            exam_date = parts[0].strip()
+            exam_time = parts[1].strip().replace("~", "-")
+        else:
+            exam_date = exam_datetime
 
         items.append(
             ExamItem(
                 course_name=item["course_name"],
                 course_code=item["course_code"],
-                exam_date=item["exam_date"],
-                exam_time=item["exam_time"],
+                exam_date=exam_date,
+                exam_time=exam_time,
                 location=item["location"],
                 seat_number=item["seat_number"],
-                exam_type=item["exam_type"],
+                exam_type=None,
                 notes=None,
             )
         )
