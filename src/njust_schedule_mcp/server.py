@@ -13,7 +13,7 @@ from fastmcp.utilities.types import Image
 from PIL import Image as PILImage, ImageDraw
 
 from .cache import CacheManager
-from .config import get_config
+from .config import get_config, set_config
 from .image_gen import render_schedule_to_png
 from .portal.client import PortalClient, PortalError
 from .portal.parsers import (
@@ -144,11 +144,12 @@ def _serialize_exams(result: ExamsParseResult) -> list[dict]:
 def bind_account(
     username: Annotated[str, "教务系统学号"],
     password: Annotated[str, "教务系统密码"],
+    semester_start_date: Annotated[str, "学期第一天日期（周一），格式 YYYY-MM-DD，如 2026-03-02"] = "",
 ) -> str:
     """
-    绑定教务系统账号密码。绑定后会自动验证账号有效性。
+    绑定教务系统账号密码，并设置学期开始日期。绑定后会自动验证账号有效性。
 
-    使用示例：bind_account(username="学号", password="密码")
+    使用示例：bind_account(username="学号", password="密码", semester_start_date="2026-03-02")
     """
     global _client
     try:
@@ -161,7 +162,16 @@ def bind_account(
         # 验证账号
         result = client.login(username, password)
         _client = client
-        return f"✅ 教务系统账号绑定成功！\n学号: {username}\n会话已建立，可以开始查询课表、成绩等信息。"
+
+        # 设置学期开始日期
+        msg = f"✅ 教务系统账号绑定成功！\n学号: {username}\n会话已建立，可以开始查询课表、成绩等信息。"
+        if semester_start_date:
+            os.environ["SEMESTER_START_DATE"] = semester_start_date
+            # 刷新配置单例
+            from .config import load_config
+            set_config(load_config())
+            msg += f"\n📅 学期开始日期已设为: {semester_start_date}"
+        return msg
     except PortalError as e:
         return f"❌ 绑定失败: {e.message}"
     except Exception as e:
@@ -237,6 +247,21 @@ def _build_entry(e: dict) -> ScheduleOccurrence:
     )
 
 
+def _get_current_week() -> int | None:
+    """根据学期开始日期计算当前周次，未配置则返回 None"""
+    config = get_config()
+    if not config.semester_start_date:
+        return None
+    try:
+        start = datetime.strptime(config.semester_start_date, "%Y-%m-%d").date()
+        today = datetime.now().date()
+        week = max(1, (today - start).days // 7 + 1)
+        return week
+    except ValueError:
+        logger.warning("学期开始日期格式错误: %s", config.semester_start_date)
+        return None
+
+
 @mcp.tool
 def query_today_schedule() -> str:
     """
@@ -252,23 +277,31 @@ def query_today_schedule() -> str:
         # 计算当前周次和星期
         now = datetime.now()
         weekday = now.isoweekday()  # 1=周一, 7=周日
+        current_week = _get_current_week()
 
         # 获取课表
         result = _get_cached_or_fetch_lessons(client, cache)
 
-        # 过滤今天的课程
+        # 过滤今天的课程（同时按周次过滤）
         today_label = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"][weekday]
         today_entries = [
-            e for e in result.entries if e.weekday == weekday
+            e for e in result.entries
+            if e.weekday == weekday
+            and (current_week is None or current_week in e.week_numbers)
         ]
 
         if not today_entries:
-            return f"📅 今天是{today_label}，没有课程 🎉"
+            week_info = f"（第 {current_week} 周）" if current_week else ""
+            return f"📅 今天是{today_label}{week_info}，没有课程 🎉"
 
         lines = [
             f"## 📅 今天是{today_label}的课程\n",
-            f"学期: {result.term or '未知'}\n",
+            f"学期: {result.term or '未知'}",
         ]
+        if current_week:
+            lines.append(f"周次: 第 {current_week} 周\n")
+        else:
+            lines.append("")
         for entry in sorted(today_entries, key=lambda e: e.block_start):
             time_str = f"第 {entry.block_start}-{entry.block_end} 节"
             lines.append(
@@ -296,12 +329,16 @@ def query_week_schedule() -> str:
     try:
         client = _get_client()
         cache = _get_cache()
-        config = get_config()
 
         # 获取课表
         result = _get_cached_or_fetch_lessons(client, cache)
 
-        return format_schedule_text(result)
+        # 计算当前周次
+        current_week = _get_current_week()
+        if current_week is None:
+            return "⚠️ 未配置学期开始日期（SEMESTER_START_DATE），无法计算当前周次。请在 MCP 配置的 args 中添加 --semester-start-date YYYY-MM-DD，或通过 bind_account 工具绑定。"
+
+        return format_schedule_text(result, week=current_week)
     except PortalError as e:
         return f"❌ 查询失败: {e.message}"
     except Exception as e:
@@ -326,10 +363,12 @@ def generate_schedule_image(
         # 获取课表
         result = _get_cached_or_fetch_lessons(client, cache)
 
-        # 如果 week=0，尝试计算当前周次（简化处理：返回全部周次课表）
+        # 如果 week=0，计算当前周次
         if week == 0:
-            # 默认使用第1周作为示例（实际需要根据学期开始日期计算）
-            week = 1
+            current_week = _get_current_week()
+            if current_week is None:
+                current_week = 1
+            week = current_week
 
         term = result.term or "未知学期"
         png_bytes = render_schedule_to_png(
@@ -655,6 +694,7 @@ def main():
     parser = argparse.ArgumentParser(description="NJUST 教务系统 MCP 服务器")
     parser.add_argument("--username", help="教务系统学号")
     parser.add_argument("--password", help="教务系统密码")
+    parser.add_argument("--semester-start-date", help="学期第一天日期 (YYYY-MM-DD)")
     args = parser.parse_args()
 
     # 命令行参数优先级最高，写入环境变量
@@ -662,6 +702,8 @@ def main():
         os.environ["PORTAL_USERNAME"] = args.username
     if args.password:
         os.environ["PORTAL_PASSWORD"] = args.password
+    if args.semester_start_date:
+        os.environ["SEMESTER_START_DATE"] = args.semester_start_date
 
     logging.basicConfig(
         level=logging.INFO,

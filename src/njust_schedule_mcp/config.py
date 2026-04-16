@@ -55,6 +55,9 @@ class Config:
     # 考试缓存 TTL（小时）
     exams_cache_ttl_hours: int = 3
 
+    # 学期第一天日期（YYYY-MM-DD），用于计算当前周次
+    semester_start_date: str = ""
+
 
 def load_config() -> Config:
     """从环境变量加载配置（优先 .env 文件，其次系统环境变量）"""
@@ -95,6 +98,7 @@ def load_config() -> Config:
         exams_cache_ttl_hours=int(
             os.environ.get("EXAMS_CACHE_TTL_HOURS", "3")
         ),
+        semester_start_date=os.environ.get("SEMESTER_START_DATE", ""),
     )
 
 

@@ -36,27 +36,35 @@ pip install uv --break-system-packages
 pip install njust-schedule-mcp --break-system-packages
 ```
 
-### Step 3. 配置 AstrBot
+### Step 3. 配置凭据
+
+创建 `.env` 文件（**不要提交到 Git**）：
+
+```bash
+mkdir -p ~/.njust-schedule-mcp
+cat > ~/.njust-schedule-mcp/.env << 'EOF'
+PORTAL_USERNAME=你的学号
+PORTAL_PASSWORD=你的密码
+EOF
+chmod 600 ~/.njust-schedule-mcp/.env
+```
+
+### Step 4. 配置 AstrBot
 
 进入 AstrBot WebUI → **MCP 服务器** → **添加**：
 
 ```json
 {
-  "command": "env",
-  "args": [
-    "PORTAL_USERNAME=你的学号",
-    "PORTAL_PASSWORD=你的密码",
-    "uv",
-    "tool",
-    "run",
-    "njust-schedule-mcp"
-  ]
+  "command": "python3",
+  "args": ["-m", "njust_schedule_mcp.server"]
 }
 ```
 
+> `python3 -m` 是 AstrBot 允许的 MCP 启动命令。凭据通过 `~/.njust-schedule-mcp/.env` 文件传递。
+
 保存后重启 AstrBot。
 
-### Step 4. 验证
+### Step 5. 验证
 
 对 QQ Bot 发送 `查一下这学期的课表`，如果返回课表信息则配置成功。
 
@@ -83,14 +91,25 @@ pip install uv --break-system-packages
 pip install njust-schedule-mcp --break-system-packages
 ```
 
-### Step 3. 退出并重启容器
+### Step 3. 配置凭据
+
+```bash
+mkdir -p ~/.njust-schedule-mcp
+cat > ~/.njust-schedule-mcp/.env << 'EOF'
+PORTAL_USERNAME=你的学号
+PORTAL_PASSWORD=你的密码
+EOF
+chmod 600 ~/.njust-schedule-mcp/.env
+```
+
+### Step 4. 退出并重启容器
 
 ```bash
 exit
 docker restart astrbot
 ```
 
-### Step 4. 配置 AstrBot
+### Step 5. 配置 AstrBot
 
 与方式一相同，在 WebUI 中添加 MCP 服务器配置。
 
@@ -112,8 +131,13 @@ RUN pip install uv njust-schedule-mcp --break-system-packages
 
 ```bash
 docker build -t astrbot-njust .
-docker run -d --name astrbot -p 6185:6185 astrbot-njust
+docker run -d --name astrbot \
+  -p 6185:6185 \
+  -v ~/.njust-schedule-mcp:/root/.njust-schedule-mcp \
+  astrbot-njust
 ```
+
+> 使用 `-v` 挂载 `.env` 文件目录，这样凭据不会丢失。
 
 ---
 
@@ -141,15 +165,48 @@ pip install uv --break-system-packages
 pip install -e . --break-system-packages
 ```
 
-### Step 4. 配置 AstrBot
+### Step 4. 配置凭据
+
+```bash
+mkdir -p ~/.njust-schedule-mcp
+cp .env.example ~/.njust-schedule-mcp/.env
+# 编辑 .env 填入你的学号和密码
+nano ~/.njust-schedule-mcp/.env
+chmod 600 ~/.njust-schedule-mcp/.env
+```
+
+### Step 5. 配置 AstrBot
 
 在 WebUI 中添加 MCP 服务器配置，`args` 中的包名保持 `njust-schedule-mcp` 不变。
 
 ---
 
-## 环境变量参考
+## 凭据配置方式
 
-所有环境变量通过 AstrBot MCP 配置中的 `env` 命令传入：
+本项目支持两种凭据传递方式（优先级从高到低）：
+
+### 方式 A：.env 文件（推荐）
+
+在 `~/.njust-schedule-mcp/.env` 中配置：
+
+```bash
+PORTAL_USERNAME=你的学号
+PORTAL_PASSWORD=你的密码
+```
+
+- 优点：凭据不在 MCP 配置中出现，更安全
+- 适用于：所有部署方式
+
+### 方式 B：AstrBot MCP 配置中的环境变量
+
+如果 AstrBot 允许设置 `ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS`，可以通过 `env` 命令传递：
+
+```bash
+# 在 AstrBot 环境变量中添加
+ASTRBOT_MCP_STDIO_ALLOWED_COMMANDS=env
+```
+
+然后在 MCP 配置中：
 
 ```json
 {
@@ -157,24 +214,33 @@ pip install -e . --break-system-packages
   "args": [
     "PORTAL_USERNAME=学号",
     "PORTAL_PASSWORD=密码",
-    "CACHE_DIR=/path/to/cache",
-    "CAPTCHA_MAX_ATTEMPTS=5",
-    "uv", "tool", "run", "njust-schedule-mcp"
+    "python3",
+    "-m",
+    "njust_schedule_mcp.server"
   ]
 }
 ```
+
+> **不推荐此方式**：密码会出现在 AstrBot 的 MCP 配置中，可能被日志记录。
+
+---
+
+## 环境变量参考
+
+所有环境变量可通过 `.env` 文件或系统环境变量设置：
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
 | `PORTAL_USERNAME` | ✅ | — | 教务系统学号 |
 | `PORTAL_PASSWORD` | ✅ | — | 教务系统密码 |
 | `PORTAL_BASE_URL` | ❌ | `http://202.119.81.112:9080` | 教务系统地址 |
-| `PORTAL_LOGIN_URL` | ❌ | `http://202.119.81.113:8080` | 登录地址 |
+| `PORTAL_LOGIN_URL` | ❌ | `http://202.119.81.112:9080` | 登录地址 |
 | `CACHE_DIR` | ❌ | `~/.njust-schedule-mcp/cache` | 缓存目录 |
 | `CAPTCHA_MAX_ATTEMPTS` | ❌ | `3` | 验证码最大重试次数 |
 | `SCHEDULE_CACHE_TTL_HOURS` | ❌ | `6` | 课表缓存有效期（小时） |
 | `GRADES_CACHE_TTL_HOURS` | ❌ | `3` | 成绩缓存有效期（小时） |
 | `EXAMS_CACHE_TTL_HOURS` | ❌ | `3` | 考试缓存有效期（小时） |
+| `SEMESTER_START_DATE` | ❌ | — | 学期第一天日期（周一，YYYY-MM-DD），如 `2026-02-23` |
 
 ---
 
@@ -219,28 +285,39 @@ fc-cache -fv
 ### 登录频繁失败
 
 - 检查服务器是否能访问教务系统：`curl -I http://202.119.81.113:8080`
-- 增大验证码重试次数：在 MCP 配置中添加 `CAPTCHA_MAX_ATTEMPTS=5`
+- 增大验证码重试次数：在 `.env` 中添加 `CAPTCHA_MAX_ATTEMPTS=5`
 - 校园网外需要配置 VPN
 
 ### MCP 服务器启动失败
 
 ```bash
 # 手动测试 MCP 服务器是否能启动
-PORTAL_USERNAME=测试学号 PORTAL_PASSWORD=测试密码 uv tool run njust-schedule-mcp
+python3 -m njust_schedule_mcp.server
 
 # 检查依赖是否完整
-python3 -c "import fastmcp, requests, bs4, ddddocr, PIL; print('OK')"
+python3 -c "import fastmcp, requests, bs4, ddddocr, PIL, dotenv; print('OK')"
 ```
 
 ### Docker 容器重启后 MCP 失效
 
 容器重启会丢失安装的包。使用 [Dockerfile 方案](#dockerfile-方案推荐) 或在 `docker-compose.yml` 中挂载持久化卷。
 
+### AstrBot 报错 "command `env` is not allowed"
+
+AstrBot 默认不允许 `env` 命令。请改用 `.env` 文件方式传递凭据，MCP 配置中使用 `python3 -m` 命令：
+
+```json
+{
+  "command": "python3",
+  "args": ["-m", "njust_schedule_mcp.server"]
+}
+```
+
 ---
 
 ## 安全注意事项
 
 1. **HTTP 明文传输**：NJUST 教务系统使用 HTTP（非 HTTPS），学号和密码在网络中以明文传输。建议仅在可信网络（校园网/VPN）中使用。
-2. **密码保护**：不要将包含密码的 MCP 配置分享给他人或提交到 Git 仓库。
-3. **文件权限**：缓存文件已设置为 `600`（仅 owner 可读写），请确保不要修改。
+2. **密码保护**：`.env` 文件已设置 `600` 权限（仅 owner 可读写），不要将其分享或提交到 Git 仓库。
+3. **文件权限**：缓存文件和会话文件已设置为 `600` 权限，请确保不要修改。
 4. **日志安全**：敏感信息（密码、JSESSIONID、验证码）不会出现在 INFO 级别日志中，仅 DEBUG 级别可见。
