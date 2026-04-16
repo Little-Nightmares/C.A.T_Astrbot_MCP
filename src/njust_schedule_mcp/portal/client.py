@@ -78,7 +78,10 @@ class PortalClient:
     ) -> None:
         config = get_config()
         self.base_url = config.portal_base_url
-        self.login_base_url = config.portal_login_url
+        # 支持多个登录 URL（逗号分隔），自动回退
+        self.login_base_urls = [
+            u.strip() for u in config.portal_login_url.split(",") if u.strip()
+        ]
         self.login_path = config.portal_login_path
         self.lessons_path = config.portal_lessons_path
         self.grades_path = config.portal_grades_path
@@ -217,9 +220,32 @@ class PortalClient:
         if not username or not password:
             raise PortalError("未提供教务系统账号或密码", "MISSING_CREDENTIALS")
 
-        login_url = urljoin(
-            self.login_base_url + "/", self.login_path.lstrip("/")
+        last_error = ""
+        for login_base in self.login_base_urls:
+            login_url = urljoin(
+                login_base + "/", self.login_path.lstrip("/")
+            )
+            logger.info("尝试登录: %s", login_base)
+            try:
+                return self._try_login(login_url, username, password)
+            except PortalError as e:
+                last_error = str(e)
+                if e.code in ("CREDENTIAL_ERROR", "MISSING_CREDENTIALS"):
+                    raise
+                logger.warning("登录地址 %s 不可用: %s", login_base, e)
+                continue
+
+        raise PortalError(
+            f"所有登录地址均不可用: {last_error}", "NETWORK_ERROR"
         )
+
+    def _try_login(
+        self,
+        login_url: str,
+        username: str,
+        password: str,
+    ) -> PortalLoginResult:
+        """尝试通过指定 URL 登录"""
         last_message = "教务系统登录失败，请检查账号、密码或验证码识别"
 
         for attempt in range(1, self.captcha_max_attempts + 1):

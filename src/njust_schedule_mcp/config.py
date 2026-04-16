@@ -34,7 +34,7 @@ class Config:
 
     # 教务系统地址
     portal_base_url: str = "http://202.119.81.112:9080"
-    portal_login_url: str = "http://202.119.81.112:9080"
+    portal_login_url: str = "http://202.119.81.113:8080,http://202.119.81.112:9080"
     portal_login_path: str = "/"
     portal_lessons_path: str = "/njlgdx/xskb/xskb_list.do"
     portal_grades_path: str = "/njlgdx/kscj/cjcx_list"
@@ -69,7 +69,8 @@ def load_config() -> Config:
             "PORTAL_BASE_URL", "http://202.119.81.112:9080"
         ),
         portal_login_url=os.environ.get(
-            "PORTAL_LOGIN_URL", "http://202.119.81.112:9080"
+            "PORTAL_LOGIN_URL",
+            "http://202.119.81.113:8080,http://202.119.81.112:9080",
         ),
         portal_login_path=os.environ.get("PORTAL_LOGIN_PATH", "/"),
         portal_lessons_path=os.environ.get(
