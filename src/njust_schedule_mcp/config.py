@@ -1,10 +1,27 @@
-"""配置管理模块 - 从环境变量读取配置"""
+"""配置管理模块 - 从环境变量 / .env 文件读取配置"""
 
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+# 尝试加载 .env 文件
+_env_loaded = False
+_env_paths = [
+    Path.home() / ".njust-schedule-mcp" / ".env",
+    Path.cwd() / ".env",
+]
+for _env_path in _env_paths:
+    if _env_path.is_file():
+        try:
+            from dotenv import load_dotenv
+
+            load_dotenv(_env_path, override=False)
+            _env_loaded = True
+        except ImportError:
+            pass
+        break
 
 
 @dataclass(frozen=True)
@@ -40,7 +57,7 @@ class Config:
 
 
 def load_config() -> Config:
-    """从环境变量加载配置"""
+    """从环境变量加载配置（优先 .env 文件，其次系统环境变量）"""
     cache_dir = os.environ.get("CACHE_DIR", "")
     if not cache_dir:
         cache_dir = str(Path.home() / ".njust-schedule-mcp" / "cache")

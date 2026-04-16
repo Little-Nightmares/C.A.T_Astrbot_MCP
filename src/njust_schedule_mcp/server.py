@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Annotated
@@ -649,6 +650,19 @@ def refresh_cache() -> str:
 
 def main():
     """MCP 服务器入口"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="NJUST 教务系统 MCP 服务器")
+    parser.add_argument("--username", help="教务系统学号")
+    parser.add_argument("--password", help="教务系统密码")
+    args = parser.parse_args()
+
+    # 命令行参数优先级最高，写入环境变量
+    if args.username:
+        os.environ["PORTAL_USERNAME"] = args.username
+    if args.password:
+        os.environ["PORTAL_PASSWORD"] = args.password
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -657,7 +671,7 @@ def main():
 
     config = get_config()
     if config.portal_username and config.portal_password:
-        logger.info("已从环境变量加载教务系统账号配置")
+        logger.info("已加载教务系统账号配置")
     else:
         logger.info(
             "未配置教务系统账号，请通过 bind_account 工具绑定"
