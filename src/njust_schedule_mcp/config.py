@@ -38,7 +38,7 @@ class Config:
     portal_login_path: str = "/"
     portal_lessons_path: str = "/njlgdx/xskb/xskb_list.do"
     portal_grades_path: str = "/njlgdx/kscj/cjcx_list"
-    portal_exams_path: str = "/njlgdx/xspjgl/kscjcx_list.do"
+    portal_exams_path: str = "/njlgdx/xsks/xsksap_list"
 
     # 请求配置
     portal_timeout: int = 20
@@ -83,7 +83,7 @@ def load_config() -> Config:
             "PORTAL_GRADES_PATH", "/njlgdx/kscj/cjcx_list"
         ),
         portal_exams_path=os.environ.get(
-            "PORTAL_EXAMS_PATH", "/njlgdx/xspjgl/kscjcx_list.do"
+            "PORTAL_EXAMS_PATH", "/njlgdx/xsks/xsksap_list"
         ),
         portal_timeout=int(os.environ.get("PORTAL_TIMEOUT", "20")),
         captcha_max_attempts=int(os.environ.get("CAPTCHA_MAX_ATTEMPTS", "3")),

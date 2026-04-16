@@ -93,6 +93,7 @@ class PortalClient:
         self._password = password or config.portal_password
         self._captcha_solver: CaptchaSolver | None = None
         self._session_cookies: dict[str, str] = {}
+        self._current_term: str = ""  # 当前学期，从课表页面获取
         self._cache_dir = Path(cache_dir or config.cache_dir)
         self._cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
 
@@ -394,6 +395,14 @@ class PortalClient:
         self._session_cookies.update(new_cookies)
         self._save_session()
 
+        # 缓存当前学期（从课表页面的下拉框提取）
+        if not self._current_term:
+            from .parsers import parse_lessons_html
+            parsed = parse_lessons_html(html)
+            if parsed.term:
+                self._current_term = parsed.term
+                logger.info("缓存当前学期: %s", self._current_term)
+
         return PortalPageResult(html=html, cookies=self._session_cookies)
 
     def fetch_grades(self) -> PortalPageResult:
@@ -437,17 +446,33 @@ class PortalClient:
 
     def fetch_exams(self) -> PortalPageResult:
         """
-        抓取考试安排页面
+        抓取考试安排页面（POST 请求，需要学期参数）
 
         Returns:
             PortalPageResult: 页面结果
         """
         cookies = self._ensure_logged_in()
         session = self._make_session(cookies)
+
+        # 如果没有缓存学期，先从课表页面获取
+        if not self._current_term:
+            try:
+                self.fetch_lessons()  # 内部会缓存 _current_term
+            except Exception:
+                pass
+
         url = urljoin(self.base_url + "/", self.exams_path.lstrip("/"))
 
         try:
-            response = session.get(url, timeout=self.timeout)
+            response = session.post(
+                url,
+                data={"xnxqid": self._current_term or ""},
+                timeout=self.timeout,
+                headers={
+                    "Referer": urljoin(self.base_url + "/", "njlgdx/xsks/xsksap_query"),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
         except requests.RequestException as e:
             raise PortalError(f"获取考试安排失败: {e}", "NETWORK_ERROR")
 
