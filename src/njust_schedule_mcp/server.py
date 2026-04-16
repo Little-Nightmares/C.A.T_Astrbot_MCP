@@ -302,7 +302,7 @@ def query_today_schedule() -> str:
             f"学期: {result.term or '未知'}",
         ]
         if current_week:
-            lines.append(f"周次: 第 {current_week} 周\n")
+            lines.append(f"**周次: 第 {current_week} 周**（以下为第 {current_week} 周今天的课程）\n")
         else:
             lines.append("")
         for entry in sorted(today_entries, key=lambda e: e.block_start):
@@ -325,7 +325,7 @@ def query_today_schedule() -> str:
 @mcp.tool
 def query_week_schedule() -> str:
     """
-    查询本周的课程安排，按天分组显示。
+    查询本周（当前周）的课程安排，按天分组显示。返回的数据是当前周，不是下周或其他周。
 
     使用示例：query_week_schedule()
     """

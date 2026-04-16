@@ -923,7 +923,7 @@ def format_schedule_text(result: LessonsParseResult, week: int | None = None) ->
     header = f"## 📚 课表 ({result.term or '未知学期'})\n\n"
 
     if week is not None:
-        header += f"**第 {week} 周**\n\n"
+        header += f"**第 {week} 周**（以下为第 {week} 周的课程，非其他周次）\n\n"
 
     # 按星期分组
     weekday_entries: dict[int, list[ScheduleOccurrence]] = {}
